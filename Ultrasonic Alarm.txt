@@ -1,0 +1,151 @@
+//*
+//  Name: David Ojo
+//  Date: 06/13/2024
+//  Assignment: Lab 2
+//  Youtube: https://youtu.be/g00JSGiuT70
+//  This program:
+//  When this code is compiled and begins to run it Idle in IDLE mode,
+//  pressing and holding the button for a short moment will change it to ARMED mode 
+//  where going in front of the sensor at a certain distance will cause a buzzer to sound,
+//  pressing and holding the button will then put the system back to IDLE mode.
+//******************************************************************************
+
+#include <msp430.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+#define TRIGGER_PDIR P2DIR
+#define TRIGGER_POUT P2OUT
+#define TRIGGER_BIT BIT0
+
+#define ECHO_PDIR P2DIR
+#define ECHO_PIN P2IN
+#define ECHO_POUT P2OUT
+#define ECHO_BIT BIT1
+
+#define BUZZER_PDIR P1DIR
+#define BUZZER_POUT P1OUT
+#define BUZZER_BIT BIT0
+
+#define BUTTON_PDIR P1DIR
+#define BUTTON_PIN P1IN
+#define BUTTON_POUT P1OUT
+#define BUTTON_PEN P1REN
+#define BUTTON_BIT BIT3
+
+void init();
+
+void initTimer(){ // Buzzer
+    // Configure Timer to use SMCLK in Up to CCR0 mode
+    CCTL0 = CCIE;                 // CCR0 interrupt enabled
+    CCR0 = 4167;                 // Count value for 1s delay @ 12kHz
+    TACTL = TASSEL_2 | MC_0 | ID_2;      // SMCLK, stop mode
+}
+
+void initTimer2(){ // Sensor
+    TACTL = TASSEL_2 | MC_0 | ID_0; // SMCLK, Stop
+}
+
+float getDistance(){
+    initTimer2(); // Stop timer
+    TA0R = 0x0000; // Reset count value
+
+    TRIGGER_POUT |= TRIGGER_BIT; // Trigger pin High
+    __delay_cycles(10);
+    TRIGGER_POUT &= ~TRIGGER_BIT; // TRIGGER pin Low
+
+    while ((ECHO_PIN & ECHO_BIT) == 0); // Waits until ECHO (P2.1) is High
+    TACTL = TASSEL_2 | MC_2 | ID_0; // Starts timer
+    while ((ECHO_PIN & ECHO_BIT) != 0); // Goes until ECHO (P2.1) is Low
+    TACTL = TASSEL_2 | MC_0 | ID_0; // Stops timer
+
+    return TA0R;
+}
+
+void setFrequency(float hertz){
+    static const float CLOCK_PERIOD_HZ = 1000000.0 / 4.0; // Desired hertz
+    float period = 1.0 / (hertz * 2.0); // Multiplying it by two to account for to and fro
+    uint16_t count = period * CLOCK_PERIOD_HZ; // Getting the needed freq
+    CCR0 = count;
+}
+
+void BUZZER() {
+    P1DIR |= BUZZER_BIT;                 // Set P1.0 to output direction
+    __enable_interrupt();
+    setFrequency(200.0);
+}
+
+void initGpio(){
+    P2DIR |= TRIGGER_BIT;
+    P2DIR &= ~ECHO_BIT;
+    P1DIR &= ~BUTTON_BIT;
+    P1OUT |= BUTTON_BIT;
+    P1REN |= BUTTON_BIT;
+    P1IES |= BUTTON_BIT;  // High to low trigger
+}
+
+void init(){ // Initialization config
+    WDTCTL = WDTPW | WDTHOLD;   // Stop watchdog timer
+    initGpio();
+}
+
+static inline bool isButtonPressed(){
+    return (BUTTON_PIN & BUTTON_BIT) == 0x00;
+}
+
+static inline bool isButtonPressedDebounced(){
+if (isButtonPressed()){
+    __delay_cycles(48000 * 2);
+    if (isButtonPressed()){
+        return true;
+    }
+}
+return false;
+}
+
+volatile int in = 0x00;
+volatile int check = 0x00;
+float distance_2 = 0x00;
+
+
+
+int main(void){
+init();
+while (1){
+switch(in){
+case 0:
+    TACTL = TASSEL_2 | MC_0 | ID_0;
+    if (isButtonPressedDebounced()){
+        in++;
+    }
+    break;
+case 1:
+    __delay_cycles(48000 * 2);
+    if (check < 1){
+        distance_2 = getDistance();
+        check++;
+    }
+    uint16_t distance = getDistance();
+    if (distance < (distance_2 * 0.20)){
+        in++;
+    }
+    break;
+case 2:
+    initTimer();
+    TACTL = TASSEL_2 | MC_1 | ID_0;
+    BUZZER();
+    while (1) {
+        if (isButtonPressedDebounced()) {
+            in = 0;
+            break;
+        }
+    }
+    break;
+}
+}
+}
+
+#pragma vector=TIMER0_A0_VECTOR
+__interrupt void Timer_A(void){
+    BUZZER_POUT ^= BUZZER_BIT; // Toggle P1.0 using exclusive-OR
+}

@@ -1,0 +1,98 @@
+
+//*
+//  Name: David Ojo
+//  Date: 08/05/2024
+//  Assignment: Lab 5
+//  Youtube: https://youtu.be/x57No9MhUtQ
+//  This program:
+//  When this code is compiled and begins to run  set the UART, ADC, and start the ADC,
+//  After which CC is closed and a game is ran on python
+//  pressing the button will start the game where the user will be a fighter jet using a button and potentiometer
+//  and moving a potentiometer will move the plane left and right while pressing the button fires.
+//  The game is endless and eternal, war has no winners.
+//******************************************************************************
+#include <msp430.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#define INPUT BIT0
+
+#define BUTTON_PDIR P1DIR
+#define BUTTON_PIN P1IN
+#define BUTTON_POUT P1OUT
+#define BUTTON_PEN P1REN
+#define BUTTON_BIT BIT3
+
+void initGpio(){
+    WDTCTL = WDTPW + WDTHOLD;                 // Stop WDT
+    P1DIR =  0x00;
+    P1OUT = 0x00;
+    P1REN |= BUTTON_BIT;
+    P1OUT |= BUTTON_BIT;
+    P1IES |= BUTTON_BIT;
+    P1IE |= BUTTON_BIT;
+    P1IFG &= ~BUTTON_BIT; // Clear the interrupt flag
+    __enable_interrupt();
+}
+
+void initUART(){
+    P1SEL = BIT1 | BIT2 | INPUT;              // P1.1 = RXD, P1.2 = TXD
+    P1SEL2 = BIT1 | BIT2 | INPUT;
+    UCA0CTL1 |= UCSSEL_2;                     // SMCLK
+    UCA0BR0 = 104;                            // 1MHz 115200
+    UCA0BR1 = 0;                              // 1MHz 115200
+    UCA0MCTL = UCBRS0;                        // Modulation UCBRSx = 5
+    UCA0CTL1 &= ~UCSWRST;                     // Initialize USCI state machine
+
+}
+
+void initADC(){
+    ADC10CTL1 = INCH_0 | ADC10DIV_3;
+    ADC10CTL0 = SREF_0 | ADC10SHT_3 | REFON | ADC10ON;
+}
+
+static inline uint8_t startADC10(){
+    ADC10CTL0 |= ENC | ADC10SC;
+    while(ADC10CTL1 & ADC10BUSY);
+    uint16_t adcValue = ADC10MEM;
+    uint8_t scaledValue = (uint8_t)(adcValue / 4 ); // Scale to 8-bit value
+    return scaledValue;
+}
+
+static inline bool isButtonPressed(){
+    return (BUTTON_PIN & BUTTON_BIT) == 0x00;
+}
+
+void sendUART(uint8_t value) {
+    while (!(IFG2 & UCA0TXIFG)); // Wait until the TX buffer is ready
+    UCA0TXBUF = value;
+}
+
+int main(void) {
+    initGpio();
+    initUART();
+    initADC();
+
+    while(1){
+    uint8_t value = startADC10();
+    if (value == 255) {
+        value = 254; // Avoid sending the shoot command accidentally
+    }
+    sendUART(value);
+    }
+}
+
+#pragma vector = PORT1_VECTOR
+    __interrupt void PortInterrupt(){
+    if(isButtonPressed()){
+        P1IFG &= ~BUTTON_BIT; // Clear flag
+        sendUART(255); // Send shoot command
+    }
+}
+
+#pragma vector=USCIAB0RX_VECTOR
+    __interrupt void USCI0RX_ISR(void){
+    while (!(IFG2 & UCA0TXIFG)); // Wait until the TX buffer is ready
+    UCA0TXBUF = UCA0RXBUF; // Echo received character
+}

@@ -1,0 +1,503 @@
+
+//*
+//  Name: David Ojo
+//  Date: 07/01/2024
+//  Assignment: Lab 3
+//  Youtube: https://youtu.be/suTKkVkiRnE
+//  This program:
+//  When this code is compiled and nothing will happen, after pressing the button
+//  a light will oscillate back and forth across 7 LEDS, 1 blue and 6 oranges,
+//  pressing on orange will allow you to reset while pressing on blue will play a special light pattern.
+//******************************************************************************
+#include <msp430.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+#define BLUE_LED_PDIR P1DIR
+#define BLUE_LED_POUT P1OUT
+#define BLUE_LED_BIT BIT6
+
+#define ORANGE0_LED_PDIR P2DIR
+#define ORANGE0_LED_POUT P2OUT
+#define ORANGE0_LED_BIT BIT0
+
+#define ORANGE1_LED_PDIR P2DIR
+#define ORANGE1_LED_POUT P2OUT
+#define ORANGE1_LED_BIT BIT1
+
+#define ORANGE2_LED_PDIR P2DIR
+#define ORANGE2_LED_POUT P2OUT
+#define ORANGE2_LED_BIT BIT2
+
+#define ORANGE3_LED_PDIR P2DIR
+#define ORANGE3_LED_POUT P2OUT
+#define ORANGE3_LED_BIT BIT3
+
+#define ORANGE4_LED_PDIR P2DIR
+#define ORANGE4_LED_POUT P2OUT
+#define ORANGE4_LED_BIT BIT4
+
+#define ORANGE5_LED_PDIR P2DIR
+#define ORANGE5_LED_POUT P2OUT
+#define ORANGE5_LED_BIT BIT5
+
+
+
+#define BUTTON_PDIR P1DIR
+#define BUTTON_PIN P1IN
+#define BUTTON_POUT P1OUT
+#define BUTTON_PEN P1REN
+#define BUTTON_BIT BIT3
+
+typedef enum {
+   Orange0 ,Orange1,Orange2,Blue,Orange3,Orange4,Orange5,Orange4_2, Orange3_2, Blue_2, Orange2_2, Orange1_2, Orange0_2, Victory,MAX_STATES
+} state_t;
+
+typedef struct{
+    uint16_t seconds;
+    bool buttonPressed;
+} inputs_t;
+
+void init();
+void delay_s(uint16_t seconds);
+
+state_t RunOrange0State(inputs_t* );
+state_t RunOrange1State(inputs_t* );
+state_t RunOrange2State(inputs_t* );
+state_t RunBlueState(inputs_t* );
+state_t RunOrange3State(inputs_t* );
+state_t RunOrange4State(inputs_t* );
+state_t RunOrange5State(inputs_t* );
+state_t RunOrange4_2State(inputs_t* );
+state_t RunOrange3_2State(inputs_t* );
+state_t RunBlue_2State(inputs_t* );
+state_t RunOrange2_2State(inputs_t* );
+state_t RunOrange1_2State(inputs_t* );
+
+
+
+static inline void setOrange0State(bool enable);
+static inline void setOrange1State(bool enable);
+static inline void setOrange2State(bool enable);
+static inline void setBlueState(bool enable);
+static inline void setOrange3State(bool enable);
+static inline void setOrange4State(bool enable);
+static inline void setOrange5State(bool enable);
+
+
+state_t (*state_table[MAX_STATES])(inputs_t*) = {
+ RunOrange0State, RunOrange1State, RunOrange2State, RunBlueState, RunOrange3State, RunOrange4State, RunOrange5State, //Foward
+ RunOrange4_2State, RunOrange3_2State, RunBlue_2State,RunOrange2_2State, RunOrange1_2State, }; //backwards
+
+static inline bool isbuttonpressed(){
+    return (BUTTON_PIN & BUTTON_BIT) == 0x00;
+
+}
+static inline bool isbuttonpressed_Debounced(){
+    if(isbuttonpressed()){
+                __delay_cycles(48000*2);
+                if(isbuttonpressed()){
+                    return true;
+                }
+            }
+    return false;
+}
+static inline bool setVictoryState(){
+  setOrange0State(false);
+  setOrange1State(true);
+  setOrange2State(false);
+  setBlueState(false);
+  setOrange3State(false);
+  setOrange4State(true);
+  setOrange5State(false);
+  __delay_cycles(1000000);
+  setOrange0State(true);
+  setOrange1State(false);
+  setOrange2State(false);
+  setBlueState(false);
+  setOrange3State(false);
+  setOrange4State(false);
+  setOrange5State(true);
+  __delay_cycles(1000000);
+  setOrange0State(false);
+  setOrange1State(false);
+  setOrange2State(true);
+  setBlueState(false);
+  setOrange3State(true);
+  setOrange4State(false);
+  setOrange5State(false);
+  __delay_cycles(1000000);
+  setOrange0State(true);
+  setOrange1State(true);
+  setOrange2State(true);
+  setBlueState(false);
+  setOrange3State(true);
+  setOrange4State(true);
+  setOrange5State(true);
+  __delay_cycles(1000000);
+  setOrange0State(false);
+  setOrange1State(false);
+  setOrange2State(false);
+  setBlueState(true);
+  setOrange3State(false);
+  setOrange4State(false);
+  setOrange5State(false);
+  __delay_cycles(1000000);
+  setOrange0State(true);
+  setOrange1State(true);
+  setOrange2State(true);
+  setBlueState(false);
+  setOrange3State(true);
+  setOrange4State(true);
+  setOrange5State(true);
+  __delay_cycles(1000000);
+}
+
+volatile int in = 0x00;
+ static inline int increment(){
+    in++;
+    if(in > 2){
+        in = 0x00;
+    }
+
+    return in;
+}
+ inputs_t inputs;
+
+ int main(void){
+ //   uint16_t seconds = 0;
+    state_t currentState = Orange0;
+    state_t nextState = currentState;
+
+    inputs.seconds = 0;
+
+    init();
+
+    while(1) {
+    switch(in){
+    case 0:
+        __delay_cycles(48000);
+        setBlueState(false);
+        setOrange0State(false);
+        setOrange1State(false);
+        setOrange2State(false);
+        setOrange3State(false);
+        setOrange4State(false);
+        setOrange5State(false);
+        if(isbuttonpressed_Debounced()){
+                        increment();
+                    }
+        break;
+    case 1:
+        __delay_cycles(48000);
+        P1IE |= BUTTON_BIT;
+        if(currentState < MAX_STATES){
+            nextState = state_table[currentState](&inputs);
+            }
+
+            // Update state
+            currentState = nextState;
+
+            // Update seconds
+            delay_s(1);
+            inputs.seconds++;
+
+            if(isbuttonpressed_Debounced()){
+                            increment();
+
+                        }
+
+        break;
+    case 2:
+        P1IE &= ~BUTTON_BIT;
+        __delay_cycles(24000);
+
+        if(P1OUT & BLUE_LED_BIT){
+            setVictoryState();
+
+        }
+        if(isbuttonpressed_Debounced()){
+            in = 0;
+        }
+        break;
+
+        }
+
+            if(in < 2){
+            // Update inputs
+            delay_s(1);
+            inputs.seconds++;
+            }
+        }
+}
+
+
+
+
+
+
+
+
+
+
+void init(){ //inistalization config
+   WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
+   P1DIR |= (BLUE_LED_BIT);
+
+   P2DIR |= (ORANGE0_LED_BIT| ORANGE1_LED_BIT | ORANGE2_LED_BIT | ORANGE3_LED_BIT | ORANGE4_LED_BIT| ORANGE5_LED_BIT);
+   P1DIR &= ~BUTTON_BIT;
+   P1OUT |= BUTTON_BIT;
+   P1REN |= BUTTON_BIT;
+   P1IES |= BUTTON_BIT;  // high to low trigger
+
+}
+
+
+
+
+
+
+
+
+
+
+state_t RunOrange0State(inputs_t* inputs){
+    state_t nextState = Orange0;
+    setBlueState(false);
+    setOrange0State(true);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange1;
+       }
+    return nextState;
+}
+state_t RunOrange1State(inputs_t* inputs){
+    state_t nextState = Orange1;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(true);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange2;
+       }
+    return nextState;
+}
+state_t RunOrange2State(inputs_t* inputs){
+    state_t nextState = Orange2;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(true);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Blue;
+       }
+    return nextState;
+}
+state_t RunBlueState(inputs_t* inputs){
+    state_t nextState = Blue;
+    setBlueState(true);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange3;
+       }
+    return nextState;
+}
+state_t RunOrange3State(inputs_t* inputs){
+    state_t nextState = Orange3;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(true);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange4;
+       }
+    return nextState;
+}
+state_t RunOrange4State(inputs_t* inputs){
+    state_t nextState = Orange4;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(true);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange5;
+       }
+    return nextState;
+}
+state_t RunOrange5State(inputs_t* inputs){
+    state_t nextState = Orange5;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(true);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange4_2;
+       }
+    return nextState;
+
+}
+state_t RunOrange4_2State(inputs_t* inputs){
+    state_t nextState = Orange4_2;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(true);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange3_2;
+       }
+    return nextState;
+}
+state_t RunOrange3_2State(inputs_t* inputs){
+    state_t nextState = Orange3_2;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(true);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Blue_2;
+       }
+    return nextState;
+}
+state_t RunBlue_2State(inputs_t* inputs){
+    state_t nextState = Blue_2;
+    setBlueState(true);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange2_2;
+       }
+    return nextState;
+    }
+state_t RunOrange2_2State(inputs_t* inputs){
+    state_t nextState = Orange2_2;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(false);
+    setOrange2State(true);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange1_2;
+       }
+    return nextState;
+}
+state_t RunOrange1_2State(inputs_t* inputs){
+    state_t nextState = Orange1_2;
+    setBlueState(false);
+    setOrange0State(false);
+    setOrange1State(true);
+    setOrange2State(false);
+    setOrange3State(false);
+    setOrange4State(false);
+    setOrange5State(false);
+    if(inputs->seconds > 1){
+           inputs->seconds = 0;
+           inputs->buttonPressed = false;
+           nextState = Orange0;
+       }
+    return nextState;
+}
+
+
+
+
+static inline void setBlueState (bool enable){
+P1OUT = enable ? BLUE_LED_POUT | BLUE_LED_BIT : BLUE_LED_POUT & ~ BLUE_LED_BIT; // ? is a quantum state in which enable = 1 is left justified and enable = 0 is right justified
+
+}
+
+static inline void setOrange0State (bool enable){
+P2OUT = enable ? ORANGE0_LED_POUT | ORANGE0_LED_BIT : ORANGE0_LED_POUT & ~ ORANGE0_LED_BIT; // ? is a quantum state in which enable = 1 is left justified and enable = 0 is right justified
+
+}
+static inline void setOrange1State (bool enable){
+P2OUT = enable ? ORANGE1_LED_POUT | ORANGE1_LED_BIT : ORANGE1_LED_POUT & ~ ORANGE1_LED_BIT; // ? is a quantum state in which enable = 1 is left justified and enable = 0 is right justified
+
+}
+static inline void setOrange2State (bool enable){
+P2OUT = enable ? ORANGE2_LED_POUT | ORANGE2_LED_BIT : ORANGE2_LED_POUT & ~ ORANGE2_LED_BIT; // ? is a quantum state in which enable = 1 is left justified and enable = 0 is right justified
+
+}
+static inline void setOrange3State (bool enable){
+P2OUT = enable ? ORANGE3_LED_POUT | ORANGE3_LED_BIT : ORANGE3_LED_POUT & ~ ORANGE3_LED_BIT; // ? is a quantum state in which enable = 1 is left justified and enable = 0 is right justified
+
+}
+static inline void setOrange4State (bool enable){
+P2OUT = enable ? ORANGE4_LED_POUT | ORANGE4_LED_BIT : ORANGE4_LED_POUT & ~ ORANGE4_LED_BIT; // ? is a quantum state in which enable = 1 is left justified and enable = 0 is right justified
+
+}
+static inline void setOrange5State (bool enable){
+P2OUT = enable ? ORANGE5_LED_POUT | ORANGE5_LED_BIT : ORANGE5_LED_POUT & ~ ORANGE5_LED_BIT; // ? is a quantum state in which enable = 1 is left justified and enable = 0 is right justified
+
+}
+
+
+void delay_s(uint16_t seconds){
+    volatile uint16_t i;
+    for(i = 0; i < seconds; i++){
+        __delay_cycles(100000);
+    }
+}
+
+#pragma vector=PORT1_VECTOR
+__interrupt void Port1ISR(){
+
+    P1IFG &= ~BIT3;
+}
